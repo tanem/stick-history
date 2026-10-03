@@ -49,6 +49,11 @@ const (
 // size.
 const stringBudget = 2
 
+// minPlaylistLimit is the lowest limit Parse puts on history playlists. A file
+// with few tracks has few pages and may have more history playlists than
+// pages, since each set on a player adds a history playlist.
+const minPlaylistLimit = 4096
+
 // Track is one entry of a History.
 type Track struct {
 	// Artist is empty when the artist table has no row for the track's artist.
@@ -92,8 +97,9 @@ func (e *Export) Histories() []History {
 // twice its size, which no file that stores each string once can do, and a
 // file with more history entries than one for each 12 bytes of its size,
 // which no file that stores each entry once can have. So does a file with
-// more history playlists than pages. That limit is not a physical one: it
-// assumes a file a player writes has fewer history playlists than pages.
+// more history playlists than 4,096 or its page count, whichever is larger.
+// That limit is not a physical one: it assumes a file a player writes stays
+// under it.
 func Parse(data []byte) (*Export, error) {
 	f, err := parseFile(data)
 	if err != nil {
@@ -142,16 +148,17 @@ func Parse(data []byte) (*Export, error) {
 
 	var histories []History
 	byID := map[uint32]int{}
-	// The limit assumes a file a player writes has fewer history playlists
-	// than pages. A file that fills its pages with 5-byte rows, each with its
-	// own id and an empty name, can have thousands for each page, and the
-	// Export keeps a History for each one.
-	playlistLimit := len(data) / f.pageSize
+	// A file that fills its pages with 5-byte rows, each with its own id and
+	// an empty name, can have thousands of history playlists for each page,
+	// and the Export keeps a History for each one. The limit is the page
+	// count, or minPlaylistLimit for a file with fewer pages than that. It
+	// assumes a file a player writes stays under it.
+	playlistLimit := max(len(data)/f.pageSize, minPlaylistLimit)
 	var numPlaylists int
 	err = f.eachRow(tableHistoryPlaylists, func(row []byte) error {
 		numPlaylists++
 		if numPlaylists > playlistLimit {
-			return fmt.Errorf("history playlists exceed %d, the most the file can hold", playlistLimit)
+			return fmt.Errorf("history playlists exceed %d, the limit for a file of this size", playlistLimit)
 		}
 		id, name, err := parseHistoryPlaylistRow(row)
 		if err != nil {
