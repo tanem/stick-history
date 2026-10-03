@@ -27,8 +27,10 @@ for target in darwin/arm64 darwin/amd64 windows/amd64 linux/amd64; do
 	rm -r "$dir"
 done
 
+# The sums are collected before SHA256SUMS is created, so it cannot list itself.
 if command -v sha256sum >/dev/null; then
-	(cd dist && sha256sum ./* | sed 's|\./||' > SHA256SUMS)
+	sums=$(cd dist && sha256sum ./*)
 else
-	(cd dist && shasum -a 256 ./* | sed 's|\./||' > SHA256SUMS)
+	sums=$(cd dist && shasum -a 256 ./*)
 fi
+printf '%s\n' "$sums" | sed 's|\./||' > dist/SHA256SUMS
