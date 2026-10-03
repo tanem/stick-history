@@ -2,8 +2,11 @@ package main
 
 import (
 	"bytes"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -294,4 +297,88 @@ func TestOlder(t *testing.T) {
 func hist(name string) (h pdb.History) {
 	h.Name = name
 	return h
+}
+
+// A path in an error message has its control characters replaced, as the
+// strings of the tracklist do. On macOS an exFAT volume label can hold them,
+// and the label is the name of the volume's root. An ordinary path prints as
+// it is.
+func TestPathInErrorMessages(t *testing.T) {
+	for _, v := range []struct{ kind, name, shown string }{
+		{"ordinary", "USB", "USB"},
+		{"crafted", "A\x1b[2JB\n\x07C", "A�[2JB��C"},
+	} {
+		t.Run(v.kind, func(t *testing.T) {
+			if v.kind == "crafted" && runtime.GOOS == "windows" {
+				t.Skip("a Windows file name cannot hold a control character")
+			}
+			// shownRoot returns root as an error message prints it.
+			shownRoot := func(root string) string {
+				return filepath.Join(filepath.Dir(root), v.shown)
+			}
+			pdbPath := func(root string) string {
+				return filepath.Join(root, "PIONEER", "rekordbox", "export.pdb")
+			}
+			// fails runs the command, which must fail and write want to
+			// standard error.
+			fails := func(t *testing.T, want string, args ...string) {
+				t.Helper()
+				if r := exec(args...); r.code != 1 || r.stdout != "" || r.stderr != want {
+					t.Errorf("got %+v\nwant stderr %q", r, want)
+				}
+			}
+
+			t.Run("missing export.pdb", func(t *testing.T) {
+				root := stick(t, v.name)
+				if err := os.Remove(pdbPath(root)); err != nil {
+					t.Fatal(err)
+				}
+				withVolumes(t, root)
+				var missing *fs.PathError
+				if _, err := os.ReadFile(pdbPath(root)); !errors.As(err, &missing) {
+					t.Fatalf("reading the removed file: %v", err)
+				}
+				fails(t, "stick-history: open "+pdbPath(shownRoot(root))+": "+missing.Err.Error()+"\n")
+			})
+
+			t.Run("malformed export.pdb", func(t *testing.T) {
+				root := writeStick(t, v.name, nil)
+				withVolumes(t, root)
+				fails(t, "stick-history: "+pdbPath(shownRoot(root))+": file is shorter than its header\n")
+			})
+
+			t.Run("no non-empty History", func(t *testing.T) {
+				root := writeStick(t, v.name, pdbtest.Build(4096, []pdbtest.Table{
+					{Type: 11, Pages: []pdbtest.Page{{Rows: [][]byte{
+						pdbtest.HistoryPlaylistRow(1, pdbtest.ShortString("HISTORY 001")),
+					}}}},
+				}))
+				withVolumes(t, root)
+				fails(t, "stick-history: "+shownRoot(root)+" has no non-empty History\n")
+			})
+
+			t.Run("no HISTORY n", func(t *testing.T) {
+				root := stick(t, v.name)
+				withVolumes(t, root)
+				fails(t, "stick-history: "+shownRoot(root)+" has no HISTORY 009\n", "--history", "9")
+			})
+
+			t.Run("no PIONEER folder", func(t *testing.T) {
+				root := filepath.Join(t.TempDir(), v.name)
+				if err := os.Mkdir(root, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				fails(t, "stick-history: "+shownRoot(root)+" has no PIONEER folder\n", "--volume", root)
+			})
+
+			// Each root is on a line of its own, indented by two spaces.
+			t.Run("more than one stick", func(t *testing.T) {
+				a, b := stick(t, v.name), stick(t, v.name)
+				withVolumes(t, a, b)
+				fails(t, "stick-history: more than one stick is mounted; pick one with --volume:\n"+
+					"  "+shownRoot(a)+"\n"+
+					"  "+shownRoot(b)+"\n")
+			})
+		})
+	}
 }
