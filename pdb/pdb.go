@@ -42,6 +42,13 @@ const (
 	stringUTF16 = 0x90 // kind byte of a long string holding UTF-16LE
 )
 
+// stringBudget is how many bytes of decoded strings Parse accepts for each
+// byte of the file. A file that stores every string once stays under 1.5: the
+// largest growth is a 2-byte UTF-16 unit that becomes 3 bytes of UTF-8. A file
+// that points many rows at one string can decode to thousands of times its
+// size.
+const stringBudget = 2
+
 // Track is one entry of a History.
 type Track struct {
 	// Artist is empty when the artist table has no row for the track's artist.
@@ -81,11 +88,22 @@ func (e *Export) Histories() []History {
 }
 
 // Parse parses the contents of an export.pdb. A malformed file produces an
-// error, never a panic.
+// error, never a panic. So does a file whose strings decode to more than
+// twice its size, which no file that stores each string once can do.
 func Parse(data []byte) (*Export, error) {
 	f, err := parseFile(data)
 	if err != nil {
 		return nil, err
+	}
+
+	limit := stringBudget * uint64(len(data))
+	var decoded uint64
+	spend := func(s string) error {
+		decoded += uint64(len(s))
+		if decoded > limit {
+			return fmt.Errorf("decoded strings exceed %d bytes, %d times the file size", limit, stringBudget)
+		}
+		return nil
 	}
 
 	artists := map[uint32]string{}
@@ -95,7 +113,7 @@ func Parse(data []byte) (*Export, error) {
 			return err
 		}
 		artists[id] = name
-		return nil
+		return spend(name)
 	})
 	if err != nil {
 		return nil, err
@@ -112,7 +130,7 @@ func Parse(data []byte) (*Export, error) {
 			return err
 		}
 		tracks[id] = trackRow{artistID, title}
-		return nil
+		return spend(title)
 	})
 	if err != nil {
 		return nil, err
@@ -123,6 +141,9 @@ func Parse(data []byte) (*Export, error) {
 	err = f.eachRow(tableHistoryPlaylists, func(row []byte) error {
 		id, name, err := parseHistoryPlaylistRow(row)
 		if err != nil {
+			return err
+		}
+		if err := spend(name); err != nil {
 			return err
 		}
 		if _, dup := byID[id]; dup {

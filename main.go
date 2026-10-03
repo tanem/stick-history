@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/tanem/stick-history/pdb"
 )
@@ -83,7 +84,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case *list:
 		for _, h := range histories {
 			if len(h.Tracks) > 0 {
-				fmt.Fprintf(&out, "%s\t%d\n", h.Name, len(h.Tracks))
+				fmt.Fprintf(&out, "%s\t%d\n", printable(h.Name), len(h.Tracks))
 			}
 		}
 	default:
@@ -92,7 +93,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return fail(stderr, err)
 		}
 		for i, t := range h.Tracks {
-			fmt.Fprintf(&out, "%d. %s - %s\n", i+1, t.Artist, t.Title)
+			fmt.Fprintf(&out, "%d. %s - %s\n", i+1, printable(t.Artist), printable(t.Title))
 		}
 	}
 
@@ -116,6 +117,20 @@ func usageError(fs *flag.FlagSet, msg string) int {
 func fail(stderr io.Writer, err error) int {
 	_, _ = fmt.Fprintf(stderr, "stick-history: %v\n", err)
 	return 1
+}
+
+// printable returns s with each control character replaced by U+FFFD. The
+// strings come from the stick, and a control character printed as stored could
+// start a new line or send an escape sequence to the terminal. The Unicode line
+// and paragraph separators are replaced as well, since some programs break a
+// line at them. Bytes that are not valid UTF-8 also come out as U+FFFD.
+func printable(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || r == '\u2028' || r == '\u2029' {
+			return unicode.ReplacementChar
+		}
+		return r
+	}, s)
 }
 
 // choose picks the History to print: HISTORY <number> when a number is given,
