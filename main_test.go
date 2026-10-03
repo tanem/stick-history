@@ -183,13 +183,17 @@ func TestBadFile(t *testing.T) {
 		"random":    bytes.Repeat([]byte{0x5a, 0xa5, 0x01}, 4096),
 		"empty":     {},
 	} {
-		os.WriteFile(path, data, 0o644)
+		if err := os.WriteFile(path, data, 0o644); err != nil {
+			t.Fatal(err)
+		}
 		r := exec()
 		if r.code != 1 || r.stdout != "" || !strings.Contains(r.stderr, "export.pdb") {
 			t.Errorf("%s: got %+v", name, r)
 		}
 	}
-	os.Remove(path)
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
 	if r := exec(); r.code != 1 || r.stdout != "" || r.stderr == "" {
 		t.Errorf("missing: got %+v", r)
 	}

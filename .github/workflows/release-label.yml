@@ -1,0 +1,44 @@
+name: Release label
+
+# A separate workflow so that a label change re-runs this check and not CI.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, labeled, unlabeled]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # The rule tanem/release-action applies to every merged pull request when it
+  # derives the next version: leaving out "safe to test", exactly one label.
+  # The labels are read from the API and not from the event, so a re-run sees
+  # the labels as they are now.
+  release-label:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - name: Check for exactly one release label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          labels=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" \
+            --jq '[.labels[].name | select(. != "safe to test")]')
+          count=$(printf '%s' "$labels" | jq 'length')
+          case "$count" in
+            1)
+              echo "Release label: $(printf '%s' "$labels" | jq -r '.[0]')"
+              ;;
+            0)
+              echo "::error::This pull request has no release label. Every pull request needs exactly one."
+              exit 1
+              ;;
+            *)
+              echo "::error::This pull request has more than one release label ($(printf '%s' "$labels" | jq -r 'join(", ")')). Every pull request needs exactly one."
+              exit 1
+              ;;
+          esac

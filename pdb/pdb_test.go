@@ -206,7 +206,7 @@ func mustNotPanic(t *testing.T, name string, data []byte) {
 			t.Fatalf("%s: Parse panicked: %v", name, r)
 		}
 	}()
-	Parse(data)
+	_, _ = Parse(data)
 }
 
 func randomBytes(n int, seed int64) []byte {
