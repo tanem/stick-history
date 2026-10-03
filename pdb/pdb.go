@@ -89,7 +89,9 @@ func (e *Export) Histories() []History {
 
 // Parse parses the contents of an export.pdb. A malformed file produces an
 // error, never a panic. So does a file whose strings decode to more than
-// twice its size, which no file that stores each string once can do.
+// twice its size, which no file that stores each string once can do, and a
+// file with more history entries than one for each 12 bytes of its size,
+// which no file that stores each entry once can have.
 func Parse(data []byte) (*Export, error) {
 	f, err := parseFile(data)
 	if err != nil {
@@ -162,7 +164,16 @@ func Parse(data []byte) (*Export, error) {
 		index   uint32
 	}
 	entries := map[uint32][]entry{}
+	// A file that stores every history entry once has at most one for each
+	// historyEntryRowLen bytes. A file that points many row offsets at one
+	// entry row can have thousands of entries for each row.
+	entryLimit := len(data) / historyEntryRowLen
+	var numEntries int
 	err = f.eachRow(tableHistoryEntries, func(row []byte) error {
+		numEntries++
+		if numEntries > entryLimit {
+			return fmt.Errorf("history entries exceed %d, the most the file can hold", entryLimit)
+		}
 		if len(row) < historyEntryRowLen {
 			return errors.New("history entry row is short")
 		}
