@@ -291,6 +291,7 @@ func TestVersionOfReleaseBuild(t *testing.T) {
 // A go install build has no stamped version. It prints the version of the
 // module it was built from, without the leading v.
 func TestVersionOfGoInstallBuild(t *testing.T) {
+	withVolumes(t)
 	withVersion(t, "")
 	withBuildInfo(t, &debug.BuildInfo{Main: debug.Module{
 		Path:    "github.com/tanem/stick-history",
@@ -308,6 +309,7 @@ func TestVersionOfGoInstallBuild(t *testing.T) {
 // 1.24 and later give a build from a checkout a version derived from the
 // commit, and that is not a release either.
 func TestVersionOfOtherBuilds(t *testing.T) {
+	withVolumes(t)
 	withVersion(t, "")
 	for name, info := range map[string]*debug.BuildInfo{
 		"go build, before Go 1.24": {Main: debug.Module{Version: "(devel)"}},

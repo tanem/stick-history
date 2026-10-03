@@ -77,7 +77,7 @@ With Go 1.23 or later:
 go install github.com/tanem/stick-history@latest
 ```
 
-Archives for macOS (Apple silicon and Intel), Windows (x86-64) and Linux (x86-64) are attached to each [GitHub Release](https://github.com/tanem/stick-history/releases), with their checksums in `SHA256SUMS`. The macOS binaries are not signed or notarised. Homebrew does not quarantine what it downloads, so the binary it installs runs without a Gatekeeper prompt. A binary from an archive downloaded with a browser is quarantined, and Gatekeeper can block it.
+Archives for macOS (Apple silicon and Intel), Windows (x86-64) and Linux (x86-64) are attached to each [GitHub Release](https://github.com/tanem/stick-history/releases), with their checksums in `SHA256SUMS`. The macOS binaries are not signed or notarised. Homebrew does not quarantine a formula's download, so the binary it installs runs without a Gatekeeper prompt. A binary from an archive downloaded with a browser is quarantined, and Gatekeeper can block it.
 
 Each archive has a build provenance attestation. With the [GitHub CLI](https://cli.github.com), this checks that an archive was built by this repo's release workflow:
 
@@ -85,7 +85,7 @@ Each archive has a build provenance attestation. With the [GitHub CLI](https://c
 gh attestation verify stick-history_0.1.0_darwin_arm64.tar.gz --repo tanem/stick-history
 ```
 
-`stick-history --version` prints the version of a release, as in `stick-history 0.1.0`. A build made with `go install` prints the version of the module, and any other build prints `stick-history (devel)`.
+`stick-history --version` prints the version of a release, as in `stick-history 0.1.0`. A build installed with `go install github.com/tanem/stick-history@latest` prints the version of the module, and any other build prints `stick-history (devel)`.
 
 ## What it reads
 
