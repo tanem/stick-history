@@ -20,6 +20,10 @@ type Page struct {
 	Rows [][]byte
 	// Deleted lists slot indexes whose presence bit is cleared.
 	Deleted []int
+	// SharedOffsets is a number of extra row offsets written after those of
+	// Rows. Each is present and points at the first row, so the page stores
+	// that row once and a reader sees it SharedOffsets more times.
+	SharedOffsets int
 	// Index marks the page as not a data page: flag 0x40 is set and the
 	// reader must skip it. The page still carries its rows, so a reader that
 	// ignores the flag sees them.
@@ -84,7 +88,10 @@ func buildPage(pageSize int, typ, index, next uint32, p Page) []byte {
 	binary.LittleEndian.PutUint32(b[0x04:], index)
 	binary.LittleEndian.PutUint32(b[0x08:], typ)
 	binary.LittleEndian.PutUint32(b[0x0c:], next)
-	n := len(p.Rows)
+	if p.SharedOffsets > 0 && len(p.Rows) == 0 {
+		panic("pdbtest: a page with shared row offsets needs a row")
+	}
+	n := len(p.Rows) + p.SharedOffsets
 	groups := (n + 15) / 16
 	// The row count is 13 bits wide across the bytes at 0x18 and 0x19. The
 	// high bits of 0x19 are flags on real sticks, so set some here to make
@@ -125,6 +132,13 @@ func buildPage(pageSize int, typ, index, next uint32, p Page) []byte {
 			binary.LittleEndian.PutUint16(b[end-4:], present|1<<j)
 		}
 		off += len(row)
+	}
+	// The slots are zero already, which is the offset of the first row.
+	for i := len(p.Rows); i < n; i++ {
+		g, j := i/16, i%16
+		end := pageSize - g*0x24
+		present := binary.LittleEndian.Uint16(b[end-4:])
+		binary.LittleEndian.PutUint16(b[end-4:], present|1<<j)
 	}
 	return b
 }
