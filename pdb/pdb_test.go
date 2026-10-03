@@ -270,6 +270,90 @@ func TestEntryLimit(t *testing.T) {
 	}
 }
 
+// historyPlaylists is a crafted file whose history playlists table has one
+// page for each count. A page has that many 5-byte rows, each with its own id
+// and an empty name, so Parse keeps one History for each row.
+func historyPlaylists(pageSize int, counts ...int) []byte {
+	pages := make([]pdbtest.Page, len(counts))
+	var id uint32
+	for i, n := range counts {
+		rows := make([][]byte, n)
+		for j := range rows {
+			id++
+			rows[j] = pdbtest.HistoryPlaylistRow(id, pdbtest.ShortString(""))
+		}
+		pages[i] = pdbtest.Page{Rows: rows}
+	}
+	return pdbtest.Build(pageSize, []pdbtest.Table{
+		{Type: 11, Pages: pages},
+	})
+}
+
+// manyHistoryPlaylists is a 4,165,000-byte file of 70 pages with 50 pages in
+// the history playlists table, each with 8,191 rows, the most a page header
+// can declare. That is 409,550 history playlists.
+func manyHistoryPlaylists() []byte {
+	counts := make([]int, 50)
+	for i := range counts {
+		counts[i] = 8191
+	}
+	return historyPlaylists(59500, counts...)
+}
+
+func TestManyHistoryPlaylists(t *testing.T) {
+	_, err := Parse(manyHistoryPlaylists())
+	if err == nil || !strings.Contains(err.Error(), "history playlists exceed") {
+		t.Errorf("got %v, want an error containing %q", err, "history playlists exceed")
+	}
+}
+
+// Parse reads 4,097 history playlists before it returns the error. With
+// go1.23.3 on darwin/arm64 it allocated about 0.9 MB, 0.2 times the file.
+// Without the limit it allocated about 127.9 MB, 30.7 times the file, and the
+// Export kept a History for each of the 409,550 rows.
+func TestManyHistoryPlaylistsMemory(t *testing.T) {
+	checkAllocated(t, manyHistoryPlaylists(), 1)
+}
+
+// A file of 28 pages has fewer pages than the lowest limit, so it may hold
+// 4,096 history playlists: 8 pages of 512 rows.
+func TestHistoryPlaylistLimitSmallFile(t *testing.T) {
+	e, err := Parse(historyPlaylists(pageSize, 512, 512, 512, 512, 512, 512, 512, 512))
+	if err != nil {
+		t.Fatalf("4096 history playlists: %v", err)
+	}
+	if got := len(e.Histories()); got != 4096 {
+		t.Errorf("4096 history playlists: got %d Histories", got)
+	}
+	_, err = Parse(historyPlaylists(pageSize, 512, 512, 512, 512, 512, 512, 512, 513))
+	if err == nil || !strings.Contains(err.Error(), "history playlists exceed 4096") {
+		t.Errorf("4097 history playlists: got %v, want an error containing %q", err, "history playlists exceed 4096")
+	}
+}
+
+// A file of 5,000 pages may hold 5,000 history playlists: the header page, one
+// page for each of the 19 other tables and 4,980 pages of history playlists.
+// All but the last of those pages have one row.
+func TestHistoryPlaylistLimitLargeFile(t *testing.T) {
+	counts := make([]int, 4980)
+	for i := range counts {
+		counts[i] = 1
+	}
+	counts[len(counts)-1] = 21
+	e, err := Parse(historyPlaylists(512, counts...))
+	if err != nil {
+		t.Fatalf("5000 history playlists: %v", err)
+	}
+	if got := len(e.Histories()); got != 5000 {
+		t.Errorf("5000 history playlists: got %d Histories", got)
+	}
+	counts[len(counts)-1] = 22
+	_, err = Parse(historyPlaylists(512, counts...))
+	if err == nil || !strings.Contains(err.Error(), "history playlists exceed 5000") {
+		t.Errorf("5001 history playlists: got %v, want an error containing %q", err, "history playlists exceed 5000")
+	}
+}
+
 func TestParseString(t *testing.T) {
 	cases := []struct {
 		name string
