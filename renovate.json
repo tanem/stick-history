@@ -1,0 +1,49 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests",
+    "customManagers:githubActionsVersions",
+    ":semanticCommitsDisabled"
+  ],
+  "minimumReleaseAge": "3 days",
+  "labels": ["internal"],
+  "vulnerabilityAlerts": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "description": "Digest, minor and patch updates merge once CI passes. Major updates wait for review.",
+      "matchUpdateTypes": ["digest", "minor", "patch"],
+      "automerge": true
+    },
+    {
+      "description": "GitHub Actions updates go into one pull request a month.",
+      "matchManagers": ["github-actions"],
+      "groupName": "CI tooling",
+      "schedule": ["* * 1 * *"]
+    },
+    {
+      "description": "The linter is CI tooling too and joins the monthly pull request.",
+      "matchDepNames": ["golangci/golangci-lint"],
+      "groupName": "CI tooling",
+      "schedule": ["* * 1 * *"]
+    },
+    {
+      "description": "A Go toolchain update changes the shipped binary.",
+      "matchDatasources": ["golang-version"],
+      "labels": ["bug"]
+    },
+    {
+      "description": "A Go module update changes the shipped binary.",
+      "matchManagers": ["gomod"],
+      "labels": ["bug"]
+    },
+    {
+      "description": "The go directive in go.mod is the oldest supported Go and is changed by hand.",
+      "matchManagers": ["gomod"],
+      "matchDepTypes": ["golang"],
+      "enabled": false
+    }
+  ]
+}

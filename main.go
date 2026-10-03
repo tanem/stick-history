@@ -42,7 +42,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("stick-history", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprint(stderr, usage)
+		_, _ = fmt.Fprint(stderr, usage)
 		fs.PrintDefaults()
 	}
 	list := fs.Bool("list", false, "print each non-empty History with its track count, newest last")
@@ -108,13 +108,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 }
 
 func usageError(fs *flag.FlagSet, msg string) int {
-	fmt.Fprintf(fs.Output(), "stick-history: %s\n", msg)
+	_, _ = fmt.Fprintf(fs.Output(), "stick-history: %s\n", msg)
 	fs.Usage()
 	return 2
 }
 
 func fail(stderr io.Writer, err error) int {
-	fmt.Fprintf(stderr, "stick-history: %v\n", err)
+	_, _ = fmt.Fprintf(stderr, "stick-history: %v\n", err)
 	return 1
 }
 
