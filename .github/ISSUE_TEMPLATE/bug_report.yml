@@ -1,0 +1,48 @@
+name: Bug report
+description: A wrong tracklist, an error or a crash.
+labels: [needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not attach an `export.pdb` to this issue. It lists every track in your collection, and issues are public.
+  - type: input
+    id: player
+    attributes:
+      label: Player model
+      description: The player that wrote the History.
+      placeholder: XDJ-700
+    validations:
+      required: true
+  - type: input
+    id: rekordbox
+    attributes:
+      label: rekordbox version
+      description: The version that exported the collection to the stick.
+      placeholder: 6.8.5
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: The system the command ran on, with its version.
+      placeholder: macOS 15.1
+    validations:
+      required: true
+  - type: input
+    id: command
+    attributes:
+      label: Command
+      description: The command as you ran it.
+      placeholder: stick-history --history 52
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: What the command printed, including anything on standard error. Say what you expected if it is not clear from the output.
+      render: text
+    validations:
+      required: true

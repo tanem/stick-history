@@ -1,6 +1,24 @@
 # stick-history
 
-`stick-history` prints the tracklist of a set from the History a Pioneer DJ player wrote to the USB stick. It reads `PIONEER/rekordbox/export.pdb` on the stick directly, so rekordbox is not needed to turn a History into a tracklist.
+[![build status](https://img.shields.io/github/actions/workflow/status/tanem/stick-history/ci.yml?branch=main&style=flat-square)](https://github.com/tanem/stick-history/actions/workflows/ci.yml)
+[![go reference](https://img.shields.io/badge/go-reference-007d9c?style=flat-square)](https://pkg.go.dev/github.com/tanem/stick-history/pdb)
+
+🎧 The stick remembers what you played. This prints it.
+
+```console
+$ stick-history
+1. Warm Up Slot - Nobody Here Yet
+2. Red Lights - Trim It Back
+3. Sync Button - Never Touched It
+4. Booth Monitor - Louder Than The Room
+5. Front Left - What Is This One
+6. Headliner - Running Late (Extended Mix)
+7. Lights On - One More (Promoter Says No Edit)
+```
+
+The morning after a set, someone asks for a track ID, and the answer is on a USB stick.
+
+`stick-history` prints the tracklist of a set from the History a Pioneer DJ player wrote to a USB stick. It reads `PIONEER/rekordbox/export.pdb` on the stick directly, so rekordbox is not needed to turn a History into a tracklist.
 
 ## Usage
 
@@ -86,3 +104,5 @@ go test -fuzz=FuzzParse ./pdb
 ```
 
 A tag of the form `v1.2.3` runs the release workflow, which builds the binaries, attaches them to a GitHub Release together with `SHA256SUMS`, and attaches a Homebrew formula for copying into the `tanem/homebrew-tap` repo.
+
+[CONTRIBUTING.md](CONTRIBUTING.md) covers sending a change, and [SECURITY.md](SECURITY.md) covers reporting a vulnerability.
