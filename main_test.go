@@ -34,6 +34,13 @@ func stick(t *testing.T, name string) string {
 			pdbtest.HistoryEntryRow(10, 3, 1),
 		}}}},
 	})
+	return writeStick(t, name, data)
+}
+
+// writeStick writes data as the export.pdb under a new volume root and
+// returns that root.
+func writeStick(t *testing.T, name string, data []byte) string {
+	t.Helper()
 	root := filepath.Join(t.TempDir(), name)
 	dir := filepath.Join(root, "PIONEER", "rekordbox")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -150,26 +157,76 @@ func TestNoStick(t *testing.T) {
 }
 
 func TestNoNonEmptyHistory(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "USB")
-	dir := filepath.Join(root, "PIONEER", "rekordbox")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	data := pdbtest.Build(4096, []pdbtest.Table{
+	withVolumes(t, writeStick(t, "USB", pdbtest.Build(4096, []pdbtest.Table{
 		{Type: 11, Pages: []pdbtest.Page{{Rows: [][]byte{
 			pdbtest.HistoryPlaylistRow(1, pdbtest.ShortString("HISTORY 001")),
 		}}}},
-	})
-	if err := os.WriteFile(filepath.Join(dir, "export.pdb"), data, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	withVolumes(t, root)
+	})))
 	r := exec()
 	if r.code != 1 || r.stdout != "" || !strings.Contains(r.stderr, "no non-empty History") {
 		t.Errorf("got %+v", r)
 	}
 	if r := exec("--list"); r.code != 0 || r.stdout != "" {
 		t.Errorf("--list: got %+v", r)
+	}
+}
+
+// A newline in a title must not start a new line of the tracklist.
+func TestNewlineInTitle(t *testing.T) {
+	withVolumes(t, writeStick(t, "USB", pdbtest.Build(4096, []pdbtest.Table{
+		{Type: 2, Pages: []pdbtest.Page{{Rows: [][]byte{
+			pdbtest.ArtistRow(0x60, 1, pdbtest.ShortString("Artist One")),
+		}}}},
+		{Type: 0, Pages: []pdbtest.Page{{Rows: [][]byte{
+			pdbtest.TrackRow(10, 1, pdbtest.ShortString("Line one\n2. Fake - Track\r\nLine three")),
+			pdbtest.TrackRow(11, 1, pdbtest.ShortString("Title B")),
+		}}}},
+		{Type: 11, Pages: []pdbtest.Page{{Rows: [][]byte{
+			pdbtest.HistoryPlaylistRow(1, pdbtest.ShortString("HISTORY 001")),
+		}}}},
+		{Type: 12, Pages: []pdbtest.Page{{Rows: [][]byte{
+			pdbtest.HistoryEntryRow(10, 1, 1),
+			pdbtest.HistoryEntryRow(11, 1, 2),
+		}}}},
+	})))
+	want := "1. Artist One - Line one\ufffd2. Fake - Track\ufffd\ufffdLine three\n2. Artist One - Title B\n"
+	if r := exec(); r.code != 0 || r.stdout != want || r.stderr != "" {
+		t.Errorf("got %+v\nwant stdout %q", r, want)
+	}
+}
+
+// A crafted stick with control characters in an artist, in titles and in a
+// History name. Each one prints as U+FFFD, in the tracklist and in --list.
+func TestControlCharactersReplaced(t *testing.T) {
+	withVolumes(t, writeStick(t, "USB", pdbtest.Build(4096, []pdbtest.Table{
+		{Type: 2, Pages: []pdbtest.Page{{Rows: [][]byte{
+			pdbtest.ArtistRow(0x60, 1, pdbtest.ShortString("Art\x1b[2Jist")),
+		}}}},
+		{Type: 0, Pages: []pdbtest.Page{{Rows: [][]byte{
+			pdbtest.TrackRow(10, 1, pdbtest.ShortString("Bell\x07 Tab\t Del\x7f")),
+			pdbtest.TrackRow(11, 1, pdbtest.UTF16String("C1 \u009b31m, separators \u2028\u2029, kept ï☃")),
+			pdbtest.TrackRow(12, 1, pdbtest.ShortString("Raw byte \x9b31m")),
+		}}}},
+		{Type: 11, Pages: []pdbtest.Page{{Rows: [][]byte{
+			pdbtest.HistoryPlaylistRow(1, pdbtest.LongASCII("HISTORY 001\x1b]0;title\x07\n")),
+			pdbtest.HistoryPlaylistRow(2, pdbtest.ShortString("HISTORY 002")),
+		}}}},
+		{Type: 12, Pages: []pdbtest.Page{{Rows: [][]byte{
+			pdbtest.HistoryEntryRow(10, 1, 1),
+			pdbtest.HistoryEntryRow(10, 2, 1),
+			pdbtest.HistoryEntryRow(11, 2, 2),
+			pdbtest.HistoryEntryRow(12, 2, 3),
+		}}}},
+	})))
+	want := "1. Art\ufffd[2Jist - Bell\ufffd Tab\ufffd Del\ufffd\n" +
+		"2. Art\ufffd[2Jist - C1 \ufffd31m, separators \ufffd\ufffd, kept ï☃\n" +
+		"3. Art\ufffd[2Jist - Raw byte \ufffd31m\n"
+	if r := exec(); r.code != 0 || r.stdout != want || r.stderr != "" {
+		t.Errorf("tracklist: got %+v\nwant stdout %q", r, want)
+	}
+	want = "HISTORY 001\ufffd]0;title\ufffd\ufffd\t1\nHISTORY 002\t3\n"
+	if r := exec("--list"); r.code != 0 || r.stdout != want || r.stderr != "" {
+		t.Errorf("--list: got %+v\nwant stdout %q", r, want)
 	}
 }
 

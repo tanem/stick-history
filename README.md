@@ -19,6 +19,8 @@ This finds the stick, picks the newest non-empty History and prints it to standa
 
 Lines end with LF. A track whose artist is missing from the stick's artist table prints with an empty artist and the separator kept, so the numbering stays aligned with the History.
 
+Control characters in a title, an artist or a History name are printed as `�` (U+FFFD), so a track always takes one line and a stick cannot send escape sequences to the terminal. The Unicode line and paragraph separators and bytes that are not valid UTF-8 are printed the same way.
+
 Options:
 
 - `--list` prints each non-empty History with its name and track count, tab-separated, newest last.
@@ -60,7 +62,7 @@ Binaries for macOS (Apple silicon and Intel), Windows (x86-64) and Linux (x86-64
 
 `export.pdb` is the database rekordbox writes to a stick when it exports a collection, and the player writes each set's History into it. The tool reads the tracks, artists, history playlists and history entries tables, following the [Deep Symmetry analysis](https://djl-analysis.deepsymmetry.org/rekordbox-export-analysis/exports.html) of the format. It depends on the Go standard library alone.
 
-The `pdb` package is separate from the command. `pdb.Open(path)` parses a file and `Histories()` returns every History with its tracks in play order, so the reader can be used on its own.
+The `pdb` package is separate from the command. `pdb.Open(path)` parses a file and `Histories()` returns every History with its tracks in play order, so the reader can be used on its own. It returns strings as the file stores them, control characters included. It returns an error for a file whose strings decode to more than twice the file's size, which happens only when a crafted file points many rows at one string.
 
 ## Caveats
 
@@ -75,6 +77,12 @@ The `pdb` package is separate from the command. `pdb.Open(path)` parses a file a
 go test ./...
 ```
 
-The tests build a synthetic `export.pdb` in memory, in `internal/pdbtest`. It holds no track, artist or History from a real collection.
+The tests build a synthetic `export.pdb` in memory, in `internal/pdbtest`. It holds no track, artist or History from a real collection. `*.pdb` is ignored by git, so a real `export.pdb` is not committed by accident.
+
+The parser has a fuzz target. `go test` runs it on its seed, and this fuzzes it:
+
+```sh
+go test -fuzz=FuzzParse ./pdb
+```
 
 A tag of the form `v1.2.3` runs the release workflow, which builds the binaries, attaches them to a GitHub Release together with `SHA256SUMS`, and attaches a Homebrew formula for copying into the `tanem/homebrew-tap` repo.

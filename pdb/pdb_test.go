@@ -1,8 +1,10 @@
 package pdb
 
 import (
+	"encoding/binary"
 	"math/rand"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -77,6 +79,38 @@ func TestParseFixture(t *testing.T) {
 	}
 }
 
+// Parse returns control characters as the file stores them. Replacing them is
+// left to the caller that prints the strings.
+func TestControlCharactersKept(t *testing.T) {
+	const (
+		artist = "Art\x1b[2Jist\x7f"
+		title  = "Line one\nLine\ttwo\u009b"
+		name   = "HISTORY\r001\x07"
+	)
+	data := pdbtest.Build(pageSize, []pdbtest.Table{
+		{Type: 2, Pages: []pdbtest.Page{{Rows: [][]byte{
+			pdbtest.ArtistRow(0x60, 1, pdbtest.ShortString(artist)),
+		}}}},
+		{Type: 0, Pages: []pdbtest.Page{{Rows: [][]byte{
+			pdbtest.TrackRow(10, 1, pdbtest.UTF16String(title)),
+		}}}},
+		{Type: 11, Pages: []pdbtest.Page{{Rows: [][]byte{
+			pdbtest.HistoryPlaylistRow(1, pdbtest.LongASCII(name)),
+		}}}},
+		{Type: 12, Pages: []pdbtest.Page{{Rows: [][]byte{
+			pdbtest.HistoryEntryRow(10, 1, 1),
+		}}}},
+	})
+	e, err := Parse(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []History{{ID: 1, Name: name, Tracks: []Track{{artist, title}}}}
+	if got := e.Histories(); !reflect.DeepEqual(got, want) {
+		t.Errorf("Histories() = %q\nwant %q", got, want)
+	}
+}
+
 // A 4096-byte page holds 284 history entry rows, more than fit in the byte at
 // 0x18 alone.
 func TestFullEntriesPage(t *testing.T) {
@@ -126,6 +160,48 @@ func TestRowRunsIntoLastGroup(t *testing.T) {
 	}
 	if got := e.Histories()[0].Tracks[0].Title; got != title {
 		t.Errorf("title has %d bytes, want %d", len(got), len(title))
+	}
+}
+
+// sharedName is a crafted file whose artists table has n rows that all point
+// at one name of size bytes. The rows are 12 bytes each and the name follows
+// the last one, so the file stores the name once and Parse decodes it n times.
+func sharedName(n, size int) []byte {
+	rows := make([][]byte, n)
+	for i := range rows {
+		rows[i] = pdbtest.ArtistRow(0x64, uint32(i+1), nil)
+		binary.LittleEndian.PutUint16(rows[i][0x0a:], uint16(12*(n-i)))
+	}
+	rows[n-1] = append(rows[n-1], pdbtest.LongASCII(strings.Repeat("x", size))...)
+	return pdbtest.Build(1<<16, []pdbtest.Table{
+		{Type: 2, Pages: []pdbtest.Page{{Rows: rows}}},
+	})
+}
+
+// Parse must not allocate many times the size of the file it is given.
+func TestSharedNameMemory(t *testing.T) {
+	data := sharedName(2000, 36000)
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	_, err := Parse(data)
+	runtime.ReadMemStats(&after)
+	allocated := after.TotalAlloc - before.TotalAlloc
+	t.Logf("the file is %d bytes and Parse allocated %d bytes, %.1f times the file; Parse returned: %v",
+		len(data), allocated, float64(allocated)/float64(len(data)), err)
+	if allocated > 4*uint64(len(data)) {
+		t.Errorf("Parse allocated more than 4 times the file size")
+	}
+}
+
+// The file is 1,376,256 bytes, so it may decode to 2,752,512 bytes of strings:
+// 76 names of 36,000 bytes fit and 77 do not.
+func TestStringBudget(t *testing.T) {
+	if _, err := Parse(sharedName(76, 36000)); err != nil {
+		t.Errorf("76 names: %v", err)
+	}
+	_, err := Parse(sharedName(77, 36000))
+	if err == nil || !strings.Contains(err.Error(), "decoded strings exceed") {
+		t.Errorf("77 names: got %v, want an error containing %q", err, "decoded strings exceed")
 	}
 }
 
@@ -198,6 +274,18 @@ func TestNoPanic(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		mustNotPanic(t, "random", randomBytes(pageSize*(1+r.Intn(4)), int64(i)))
 	}
+}
+
+// FuzzParse checks that Parse returns either an Export or an error for any
+// input. go test runs it on the seed; go test -fuzz=FuzzParse ./pdb fuzzes.
+func FuzzParse(f *testing.F) {
+	f.Add(fixture())
+	f.Fuzz(func(t *testing.T, data []byte) {
+		e, err := Parse(data)
+		if (e == nil) == (err == nil) {
+			t.Errorf("Parse returned %v, %v", e, err)
+		}
+	})
 }
 
 func mustNotPanic(t *testing.T, name string, data []byte) {
