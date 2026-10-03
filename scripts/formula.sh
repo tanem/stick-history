@@ -41,7 +41,7 @@ class StickHistory < Formula
   end
 
   test do
-    assert_match "Usage", shell_output("#{bin}/stick-history --help 2>&1")
+    assert_match "stick-history #{version}", shell_output("#{bin}/stick-history --version")
   end
 end
 FORMULA

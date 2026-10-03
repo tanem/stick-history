@@ -1,0 +1,13 @@
+# The categories of the release notes GitHub generates. They are keyed by the
+# labels that set the version bump.
+changelog:
+  categories:
+    - title: Breaking Changes
+      labels:
+        - breaking
+    - title: Enhancements
+      labels:
+        - enhancement
+    - title: Fixes & Maintenance
+      labels:
+        - "*"
