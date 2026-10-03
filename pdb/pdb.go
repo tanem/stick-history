@@ -91,7 +91,9 @@ func (e *Export) Histories() []History {
 // error, never a panic. So does a file whose strings decode to more than
 // twice its size, which no file that stores each string once can do, and a
 // file with more history entries than one for each 12 bytes of its size,
-// which no file that stores each entry once can have.
+// which no file that stores each entry once can have. So does a file with
+// more history playlists than pages. That limit is not a physical one: it
+// assumes a file a player writes has fewer history playlists than pages.
 func Parse(data []byte) (*Export, error) {
 	f, err := parseFile(data)
 	if err != nil {
@@ -140,7 +142,17 @@ func Parse(data []byte) (*Export, error) {
 
 	var histories []History
 	byID := map[uint32]int{}
+	// The limit assumes a file a player writes has fewer history playlists
+	// than pages. A file that fills its pages with 5-byte rows, each with its
+	// own id and an empty name, can have thousands for each page, and the
+	// Export keeps a History for each one.
+	playlistLimit := len(data) / f.pageSize
+	var numPlaylists int
 	err = f.eachRow(tableHistoryPlaylists, func(row []byte) error {
+		numPlaylists++
+		if numPlaylists > playlistLimit {
+			return fmt.Errorf("history playlists exceed %d, the most the file can hold", playlistLimit)
+		}
 		id, name, err := parseHistoryPlaylistRow(row)
 		if err != nil {
 			return err

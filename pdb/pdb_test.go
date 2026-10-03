@@ -270,6 +270,67 @@ func TestEntryLimit(t *testing.T) {
 	}
 }
 
+// historyPlaylists is a crafted file whose history playlists table has one
+// page for each count. A page has that many 5-byte rows, each with its own id
+// and an empty name, so Parse keeps one History for each row.
+func historyPlaylists(pageSize int, counts ...int) []byte {
+	pages := make([]pdbtest.Page, len(counts))
+	var id uint32
+	for i, n := range counts {
+		rows := make([][]byte, n)
+		for j := range rows {
+			id++
+			rows[j] = pdbtest.HistoryPlaylistRow(id, pdbtest.ShortString(""))
+		}
+		pages[i] = pdbtest.Page{Rows: rows}
+	}
+	return pdbtest.Build(pageSize, []pdbtest.Table{
+		{Type: 11, Pages: pages},
+	})
+}
+
+// manyHistoryPlaylists is a 4,165,000-byte file of 70 pages with 50 pages in
+// the history playlists table, each with 8,191 rows, the most a page header
+// can declare. That is 409,550 history playlists.
+func manyHistoryPlaylists() []byte {
+	counts := make([]int, 50)
+	for i := range counts {
+		counts[i] = 8191
+	}
+	return historyPlaylists(59500, counts...)
+}
+
+func TestManyHistoryPlaylists(t *testing.T) {
+	_, err := Parse(manyHistoryPlaylists())
+	if err == nil || !strings.Contains(err.Error(), "history playlists exceed") {
+		t.Errorf("got %v, want an error containing %q", err, "history playlists exceed")
+	}
+}
+
+// Parse reads 71 history playlists before it returns the error. With go1.23.3
+// on darwin/arm64 it allocated about 15 KB. Without the limit it allocated
+// about 127.9 MB, 30.7 times the file, and the Export kept a History for each
+// of the 409,550 rows.
+func TestManyHistoryPlaylistsMemory(t *testing.T) {
+	checkAllocated(t, manyHistoryPlaylists(), 1)
+}
+
+// A file of 21 pages may hold 21 history playlists: the header page, one page
+// for each of the 19 other tables and one page of history playlists.
+func TestHistoryPlaylistLimit(t *testing.T) {
+	e, err := Parse(historyPlaylists(pageSize, 21))
+	if err != nil {
+		t.Fatalf("21 history playlists: %v", err)
+	}
+	if got := len(e.Histories()); got != 21 {
+		t.Errorf("21 history playlists: got %d Histories", got)
+	}
+	_, err = Parse(historyPlaylists(pageSize, 22))
+	if err == nil || !strings.Contains(err.Error(), "history playlists exceed 21") {
+		t.Errorf("22 history playlists: got %v, want an error containing %q", err, "history playlists exceed 21")
+	}
+}
+
 func TestParseString(t *testing.T) {
 	cases := []struct {
 		name string
