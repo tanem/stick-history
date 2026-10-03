@@ -12,6 +12,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -72,9 +73,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return fail(stderr, err)
 	}
-	export, err := pdb.Open(filepath.Join(root, "PIONEER", "rekordbox", "export.pdb"))
+	path := filepath.Join(root, "PIONEER", "rekordbox", "export.pdb")
+	export, err := pdb.Open(path)
 	if err != nil {
-		return fail(stderr, err)
+		return fail(stderr, openError(err, path))
 	}
 	histories := export.Histories()
 	sort.SliceStable(histories, func(a, b int) bool { return older(histories[a], histories[b]) })
@@ -119,11 +121,23 @@ func fail(stderr io.Writer, err error) int {
 	return 1
 }
 
+// openError returns the error pdb.Open returned for path, with the path in its
+// text passed through printable. The error is either the *fs.PathError of a
+// failed read or a parse error that pdb.Open prefixed with the path.
+func openError(err error, path string) error {
+	var pathErr *fs.PathError
+	if errors.As(err, &pathErr) {
+		return fmt.Errorf("%s %s: %w", pathErr.Op, printable(pathErr.Path), pathErr.Err)
+	}
+	return fmt.Errorf("%s: %w", printable(path), errors.Unwrap(err))
+}
+
 // printable returns s with each control character replaced by U+FFFD. The
-// strings come from the stick, and a control character printed as stored could
-// start a new line or send an escape sequence to the terminal. The Unicode line
-// and paragraph separators are replaced as well, since some programs break a
-// line at them. Bytes that are not valid UTF-8 also come out as U+FFFD.
+// strings come from the stick, as does the name of its root, and a control
+// character printed as stored could start a new line or send an escape sequence
+// to the terminal. The Unicode line and paragraph separators are replaced as
+// well, since some programs break a line at them. Bytes that are not valid
+// UTF-8 also come out as U+FFFD.
 func printable(s string) string {
 	return strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) || r == '\u2028' || r == '\u2029' {
@@ -142,7 +156,7 @@ func choose(histories []pdb.History, number, root string) (pdb.History, error) {
 				return histories[i], nil
 			}
 		}
-		return pdb.History{}, fmt.Errorf("%s has no non-empty History", root)
+		return pdb.History{}, fmt.Errorf("%s has no non-empty History", printable(root))
 	}
 	n, err := strconv.Atoi(number)
 	if err != nil || n < 0 {
@@ -156,7 +170,7 @@ func choose(histories []pdb.History, number, root string) (pdb.History, error) {
 			return h, nil
 		}
 	}
-	return pdb.History{}, fmt.Errorf("%s has no HISTORY %03d", root, n)
+	return pdb.History{}, fmt.Errorf("%s has no HISTORY %03d", printable(root), n)
 }
 
 // historyNumber returns the n of a History named "HISTORY n".
@@ -193,7 +207,7 @@ func older(a, b pdb.History) bool {
 func findStick(volume string) (string, error) {
 	if volume != "" {
 		if !isStick(volume) {
-			return "", fmt.Errorf("%s has no PIONEER folder", volume)
+			return "", fmt.Errorf("%s has no PIONEER folder", printable(volume))
 		}
 		return volume, nil
 	}
@@ -209,6 +223,9 @@ func findStick(volume string) (string, error) {
 	case 1:
 		return sticks[0], nil
 	default:
+		for i, s := range sticks {
+			sticks[i] = printable(s)
+		}
 		return "", fmt.Errorf("more than one stick is mounted; pick one with --volume:\n  %s",
 			strings.Join(sticks, "\n  "))
 	}

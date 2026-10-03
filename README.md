@@ -37,7 +37,7 @@ This finds the stick, picks the newest non-empty History and prints it to standa
 
 Lines end with LF. A track whose artist is missing from the stick's artist table prints with an empty artist and the separator kept, so the numbering stays aligned with the History.
 
-Control characters in a title, an artist or a History name are printed as `�` (U+FFFD), so a track always takes one line and a stick cannot send escape sequences to the terminal. The Unicode line and paragraph separators and bytes that are not valid UTF-8 are printed the same way.
+Control characters in a title, an artist or a History name are printed as `�` (U+FFFD), so a track always takes one line and a stick cannot send escape sequences to the terminal. The Unicode line and paragraph separators and bytes that are not valid UTF-8 are printed the same way. So is a control character in the stick's path when an error message names it, since a volume label can hold one.
 
 Options:
 
