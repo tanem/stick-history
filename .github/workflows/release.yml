@@ -10,6 +10,10 @@ on:
         description: Report the version this run would release and change nothing
         type: boolean
         default: false
+      version:
+        description: Finish the release of this version, given without a leading v, after its run failed
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -19,6 +23,15 @@ concurrency:
   group: ${{ github.workflow }}
 
 env:
+  TAP_REPO: git@github.com:tanem/homebrew-tap.git
+  # GitHub's Ed25519 host key, as published at
+  # https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints
+  TAP_HOST_KEY: github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
+  # The identity git commits with. Only the commits to the tap use it.
+  GIT_AUTHOR_NAME: github-actions[bot]
+  GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+  GIT_COMMITTER_NAME: github-actions[bot]
+  GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
   # renovate: datasource=golang-version depName=go
   GO_VERSION: 1.27.1
   # Use the Go that setup-go installed and never download another one.
@@ -39,20 +52,76 @@ jobs:
       id-token: write
       attestations: write
     steps:
+      # A run with the version input resumes a release whose run failed after
+      # the tag: it skips release-action and runs the build, attest, upload and
+      # tap steps for that version. This fails it before anything is built when
+      # the tag or the GitHub Release is missing. dry-run and version together
+      # fail here too, since a resume has no version decision to report.
+      - name: Check the release to resume exists
+        if: inputs.version != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          if [ "$DRY_RUN" = true ]; then
+            echo "::error::The dry-run and version inputs cannot be set together."
+            exit 1
+          fi
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::The version input must look like 1.2.3, with no leading v."
+            exit 1
+          fi
+          if ! gh api --silent "repos/$GITHUB_REPOSITORY/git/ref/tags/v$VERSION"; then
+            echo "::error::The tag v$VERSION was not found."
+            exit 1
+          fi
+          if ! gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" > /dev/null; then
+            echo "::error::The GitHub Release v$VERSION was not found."
+            exit 1
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # A resume builds the tagged commit. Any other run builds the
+          # dispatched branch, which the empty ref selects.
+          ref: ${{ inputs.version != '' && format('refs/tags/v{0}', inputs.version) || '' }}
           # Nothing is pushed to this repo. release-action creates the tag
           # through the API.
           persist-credentials: false
-      # Without the key the run would fail after the release exists. This
-      # fails it before anything is tagged.
-      - name: Check the tap deploy key is set
+      # The tap step runs after the tag and the release exist, so a key that
+      # cannot push would leave the release without its formula. This fails the
+      # run before anything is tagged. GitHub refuses a read-only deploy key
+      # when a push connects, before any ref is sent, so a dry-run push finds
+      # one. Checked against a scratch repo: the dry-run push exits 128 with a
+      # read-only key and 0 with a write key, on an empty repo and on one with
+      # commits. A dry run of the release skips this and does not need the key.
+      - name: Check the tap deploy key can push
         if: ${{ !inputs.dry-run }}
         env:
           TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
         run: |
           if [ -z "$TAP_DEPLOY_KEY" ]; then
             echo "::error::The HOMEBREW_TAP_DEPLOY_KEY secret is not set."
+            exit 1
+          fi
+          key="$RUNNER_TEMP/tap_deploy_key"
+          known_hosts="$RUNNER_TEMP/known_hosts"
+          tap="$RUNNER_TEMP/homebrew-tap"
+          trap 'rm -rf "$key" "$tap"' EXIT
+          (umask 077 && printf '%s\n' "$TAP_DEPLOY_KEY" > "$key")
+          printf '%s\n' "$TAP_HOST_KEY" > "$known_hosts"
+          export GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o UserKnownHostsFile=$known_hosts -o StrictHostKeyChecking=yes"
+          if ! git clone --depth 1 "$TAP_REPO" "$tap"; then
+            echo "::error::The deploy key cannot clone tanem/homebrew-tap."
+            exit 1
+          fi
+          # A clone of an empty tap has no commit to push, so this makes one.
+          # It never leaves the runner.
+          if ! git -C "$tap" rev-parse --quiet --verify HEAD > /dev/null; then
+            git -C "$tap" commit --quiet --allow-empty -m "Check the deploy key"
+          fi
+          if ! git -C "$tap" push --dry-run origin HEAD:refs/heads/main; then
+            echo "::error::The deploy key cannot push to tanem/homebrew-tap. A read-only key is refused here."
             exit 1
           fi
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -65,21 +134,31 @@ jobs:
       # since the last release, then tags this commit and creates the GitHub
       # Release. When nothing was merged it reports "skipped". On a dry run it
       # logs the version and the bump and changes nothing. The input is empty
-      # on a scheduled run, which the action reads as false.
+      # on a scheduled run, which the action reads as false. A resume skips
+      # this, so it creates no tag and no release.
       - uses: tanem/release-action@1f7a65201b7636236bc51d84fa455711ba867790 # v0.1.4
         id: release
+        if: inputs.version == ''
         with:
           publish: false
           dry-run: ${{ inputs.dry-run }}
-      # The action reports "released" on a dry run too, so each step below
-      # also checks the input.
-      - name: Build binaries
-        if: steps.release.outputs.status == 'released' && !inputs.dry-run
+      # The one source of the version for the steps below: the input on a
+      # resume, the action's output otherwise. The action reports "released" on
+      # a dry run too, so this also checks the input. When this is skipped its
+      # output is empty and the steps below are skipped.
+      - name: Choose the version to publish
+        id: version
+        if: ${{ !inputs.dry-run && (inputs.version != '' || steps.release.outputs.status == 'released') }}
         env:
-          VERSION: ${{ steps.release.outputs.version }}
+          VERSION: ${{ inputs.version || steps.release.outputs.version }}
+        run: echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Build binaries
+        if: steps.version.outputs.version != ''
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: scripts/build.sh "$VERSION"
       - name: Attest the archives
-        if: steps.release.outputs.status == 'released' && !inputs.dry-run
+        if: steps.version.outputs.version != ''
         # With no predicate input the action writes a build provenance
         # attestation.
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
@@ -87,34 +166,47 @@ jobs:
           subject-path: |
             dist/*.tar.gz
             dist/*.zip
+      # On a resume the release can already hold some of the files, and
+      # --clobber replaces them.
       - name: Attach the archives and the checksum file to the release
-        if: steps.release.outputs.status == 'released' && !inputs.dry-run
+        if: steps.version.outputs.version != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.release.outputs.version }}
-        run: gh release upload "v$VERSION" dist/*
+          VERSION: ${{ steps.version.outputs.version }}
+        run: gh release upload "v$VERSION" dist/* --clobber
       - name: Commit the formula to the tap
-        if: steps.release.outputs.status == 'released' && !inputs.dry-run
+        if: steps.version.outputs.version != ''
         env:
-          VERSION: ${{ steps.release.outputs.version }}
+          VERSION: ${{ steps.version.outputs.version }}
           TAP_DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
         run: |
           key="$RUNNER_TEMP/tap_deploy_key"
           known_hosts="$RUNNER_TEMP/known_hosts"
           tap="$RUNNER_TEMP/homebrew-tap"
+          formula="$tap/Formula/stick-history.rb"
+          trap 'rm -rf "$key" "$tap"' EXIT
           (umask 077 && printf '%s\n' "$TAP_DEPLOY_KEY" > "$key")
-          # GitHub's Ed25519 host key, as published at
-          # https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints
-          echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > "$known_hosts"
+          printf '%s\n' "$TAP_HOST_KEY" > "$known_hosts"
           export GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o UserKnownHostsFile=$known_hosts -o StrictHostKeyChecking=yes"
-          git clone --depth 1 git@github.com:tanem/homebrew-tap.git "$tap"
+          git clone --depth 1 "$TAP_REPO" "$tap"
+          # A resume of an older version must not replace the formula of a
+          # later release.
+          if [ -f "$formula" ]; then
+            current=$(sed -n 's/^  version "\(.*\)"$/\1/p' "$formula")
+            newest=$(printf '%s\n' "$current" "$VERSION" | sort -V | tail -n 1)
+            if [ "$newest" != "$VERSION" ]; then
+              echo "The tap holds $current, which is later than $VERSION. The formula is unchanged."
+              exit 0
+            fi
+          fi
           mkdir -p "$tap/Formula"
-          scripts/formula.sh "$VERSION" dist > "$tap/Formula/stick-history.rb"
+          scripts/formula.sh "$VERSION" dist > "$formula"
           git -C "$tap" add Formula/stick-history.rb
-          git -C "$tap" \
-            -c user.name="github-actions[bot]" \
-            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -m "stick-history $VERSION"
+          # On a resume the tap can already hold this formula.
+          if git -C "$tap" diff --cached --quiet; then
+            echo "The formula in the tap is current."
+            exit 0
+          fi
+          git -C "$tap" commit -m "stick-history $VERSION"
           # Names the branch, since a clone of an empty tap is not on main.
           git -C "$tap" push origin HEAD:refs/heads/main
-          rm "$key"

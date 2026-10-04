@@ -120,7 +120,11 @@ The release workflow runs every Monday and can be started by hand. It uses [tane
 
 When there is something to release, the workflow tags the commit and creates the GitHub Release with notes GitHub generates from the pull requests. It then builds the archives with `scripts/build.sh`, attests them, attaches them to the release together with `SHA256SUMS`, and commits the formula that `scripts/formula.sh` writes to `tanem/homebrew-tap`. No tag is pushed by hand.
 
-A run started by hand with the dry-run option logs the version it would release and changes nothing.
+Before it tags anything, the workflow checks that the tap's deploy key can push: it clones `tanem/homebrew-tap` with the key and runs `git push --dry-run` against it. GitHub refuses a read-only deploy key at that point, so a key that is missing, cannot reach the tap or cannot write to it fails the run before a tag or a release exists.
+
+A run started by hand with the dry-run option logs the version it would release and changes nothing. It skips the deploy key check and does not need the key.
+
+A run that fails after the tag leaves a release without some of its archives, its attestations or its formula, and running the workflow again does not finish it. To finish it, start the workflow by hand with the `version` input set to that version, without a leading `v`, as in `0.1.0`. That run creates no tag and no release. It fails before building if the tag `v<version>` or its GitHub Release does not exist. Otherwise it checks out the tag, builds and attests the archives, uploads them in place of any files already on the release, and commits the formula to the tap when it differs from the one there. Two builds of a version are not byte-identical, so resuming a release that was already complete replaces its archives and commits a formula with the new checksums. The attestations of the replaced archives stay in the attestation store. When the tap already holds the formula of a later version, the formula is left as it is. `version` and the dry-run option cannot be set together, and a run with both fails.
 
 [docs/adr/0001-keep-build-scripts-over-goreleaser.md](docs/adr/0001-keep-build-scripts-over-goreleaser.md) records why the build uses these scripts and not GoReleaser.
 
