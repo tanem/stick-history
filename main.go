@@ -99,11 +99,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 	sort.SliceStable(histories, func(a, b int) bool { return older(histories[a], histories[b]) })
 
 	var out bytes.Buffer
+	var empty int
 	switch {
 	case *list:
 		for _, h := range histories {
 			if len(h.Tracks) > 0 {
 				fmt.Fprintf(&out, "%s\t%d\n", printable(h.Name), len(h.Tracks))
+			} else {
+				empty++
 			}
 		}
 	default:
@@ -123,6 +126,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	if err != nil {
 		return fail(stderr, err)
+	}
+	// Only --list counts the empty Histories.
+	if empty > 0 {
+		verb := "are"
+		if empty == 1 {
+			verb = "is"
+		}
+		_, _ = fmt.Fprintf(stderr, "stick-history: %d of %d Histories %s empty and not listed\n", empty, len(histories), verb)
 	}
 	return 0
 }

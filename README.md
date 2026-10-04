@@ -48,7 +48,7 @@ Some characters are printed as `�` (U+FFFD). This keeps each track on one line
 
 Options:
 
-- `--list` prints each non-empty History with its name and track count, tab-separated, newest last.
+- `--list` prints each non-empty History with its name and track count, tab-separated, newest last. If any History is empty, a line on standard error says how many of the Histories were left out.
 - `--history <n>` prints `HISTORY <n>` instead of the newest one. `<n>` can be given with or without leading zeros: `--history 52` and `--history 052` are the same.
 - `--volume <path>` chooses the stick when more than one is mounted. Without it, the command exits non-zero and lists the candidates on standard error.
 - A trailing path writes the tracklist to that file instead of standard output. Options go before the path.
@@ -135,6 +135,7 @@ The `pdb` package can be used without the command. `pdb.Open(path)` parses a fil
 - Verified on an XDJ-700 with a stick exported by rekordbox 6. Sticks exported by rekordbox 7 have not been checked.
 - Newer players also write a Device Library Plus database, `exportLibrary.db`. The tool does not read it.
 - One stick per set. Histories from two sticks are not merged.
+- A History can hold fewer tracks than were played, or none. On one stick, rekordbox had synced the collection after the sets. The tracks it removed from the stick were gone from the stick's track table, and so were the History entries that pointed at them, so 122 of 124 Histories were empty and the other two held 4 and 5 tracks. The tool prints what the stick holds. This was seen on that one stick and has not been checked against rekordbox directly.
 - Artist rows of subtype `0x64` did not occur on the stick the tool was verified against. Their layout follows the Deep Symmetry analysis and is covered by the synthetic test fixture only.
 
 ## Development

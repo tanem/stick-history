@@ -91,19 +91,20 @@ func TestNewestByDefault(t *testing.T) {
 func TestList(t *testing.T) {
 	withVolumes(t, stick(t, "USB"))
 	r := exec("--list")
-	if r.code != 0 || r.stdout != "HISTORY 001\t2\nHISTORY 010\t1\n" || r.stderr != "" {
-		t.Errorf("got %+v", r)
+	wantErr := "stick-history: 1 of 3 Histories is empty and not listed\n"
+	if r.code != 0 || r.stdout != "HISTORY 001\t2\nHISTORY 010\t1\n" || r.stderr != wantErr {
+		t.Errorf("got %+v\nwant stderr %q", r, wantErr)
 	}
 }
 
 func TestHistoryFlag(t *testing.T) {
 	withVolumes(t, stick(t, "USB"))
 	for _, n := range []string{"1", "01", "001"} {
-		if r := exec("--history", n); r.code != 0 || r.stdout != history1 {
+		if r := exec("--history", n); r.code != 0 || r.stdout != history1 || r.stderr != "" {
 			t.Errorf("--history %s: got %+v", n, r)
 		}
 	}
-	if r := exec("--history", "10"); r.code != 0 || r.stdout != history10 {
+	if r := exec("--history", "10"); r.code != 0 || r.stdout != history10 || r.stderr != "" {
 		t.Errorf("--history 10: got %+v", r)
 	}
 	for n, msg := range map[string]string{
@@ -170,8 +171,21 @@ func TestNoNonEmptyHistory(t *testing.T) {
 	if r.code != 1 || r.stdout != "" || !strings.Contains(r.stderr, "no non-empty History") {
 		t.Errorf("got %+v", r)
 	}
-	if r := exec("--list"); r.code != 0 || r.stdout != "" {
-		t.Errorf("--list: got %+v", r)
+}
+
+// --list on a stick whose every History is empty prints no row and still
+// exits 0.
+func TestListWhenEveryHistoryIsEmpty(t *testing.T) {
+	withVolumes(t, writeStick(t, "USB", pdbtest.Build(4096, []pdbtest.Table{
+		{Type: 11, Pages: []pdbtest.Page{{Rows: [][]byte{
+			pdbtest.HistoryPlaylistRow(1, pdbtest.ShortString("HISTORY 001")),
+			pdbtest.HistoryPlaylistRow(2, pdbtest.ShortString("HISTORY 002")),
+		}}}},
+	})))
+	r := exec("--list")
+	wantErr := "stick-history: 2 of 2 Histories are empty and not listed\n"
+	if r.code != 0 || r.stdout != "" || r.stderr != wantErr {
+		t.Errorf("got %+v\nwant stderr %q", r, wantErr)
 	}
 }
 
