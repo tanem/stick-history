@@ -4,6 +4,24 @@
 // Only the tracks, artists, history playlists and history entries tables are
 // read. The layout follows the Deep Symmetry analysis of the format:
 // https://djl-analysis.deepsymmetry.org/rekordbox-export-analysis/exports.html
+//
+// Open parses a file and Parse parses the contents of one. Histories returns
+// every History with its tracks in play order. Strings are returned as the
+// file stores them, control characters included.
+//
+// # Limits
+//
+// Open and Parse return an error for a file that exceeds any of these limits:
+//
+//   - Strings: the decoded strings total more than twice the file's size.
+//     Only a crafted file gets there, by pointing many rows at one string.
+//   - History entries: more than one for each 12 bytes of the file's size.
+//     Only a crafted file gets there, by pointing many row offsets at one
+//     history entry.
+//   - History playlists: more than 4,096 or the file's page count, whichever
+//     is larger. This limit is assumed, not physical: a file a player writes
+//     is expected to stay under it, but a crafted file can fill its pages
+//     with short history playlist rows and hold thousands for each page.
 package pdb
 
 import (
@@ -93,13 +111,8 @@ func (e *Export) Histories() []History {
 }
 
 // Parse parses the contents of an export.pdb. A malformed file produces an
-// error, never a panic. So does a file whose strings decode to more than
-// twice its size, which no file that stores each string once can do, and a
-// file with more history entries than one for each 12 bytes of its size,
-// which no file that stores each entry once can have. So does a file with
-// more history playlists than 4,096 or its page count, whichever is larger.
-// That limit is not a physical one: it assumes a file a player writes stays
-// under it.
+// error, never a panic. So does a file that exceeds one of the limits in the
+// package documentation.
 func Parse(data []byte) (*Export, error) {
 	f, err := parseFile(data)
 	if err != nil {

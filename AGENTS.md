@@ -12,6 +12,16 @@ The five triage roles use their default label names: `needs-triage`, `needs-info
 
 This repo is single-context. It has one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+## Docs
+
+- `README.md` is for the person running the command. Keep the detail in the pages below.
+- `docs/cli.md` has the full behaviour of the command: stick detection, output rules and errors.
+- `docs/install.md` has the release archives, how to verify one, Gatekeeper and the `--version` output.
+- `docs/export-pdb.md` has the notes on `export.pdb`: what the tool reads, what has been verified and why a History can be empty.
+- `docs/releasing.md` has the release runbook.
+- The limits the parser puts on a file are in the `pdb` package doc comment, in `pdb/pdb.go`.
+- `go test ./...` checks the relative links in every Markdown file, in `internal/doclinks`.
+
 ## Pull requests
 
 ### Release label
