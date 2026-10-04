@@ -47,8 +47,10 @@ func Broken(fsys fs.FS) ([]Link, error) {
 		}
 		for i, line := range strings.Split(string(data), "\n") {
 			for _, m := range linkTarget.FindAllStringSubmatch(line, -1) {
+				// One of the two groups is empty: m[1] is an inline link's
+				// destination and m[2] is a reference definition's.
 				target := m[1] + m[2]
-				if !exists(fsys, name, target) {
+				if isBroken(fsys, name, target) {
 					broken = append(broken, Link{File: name, Line: i + 1, Target: target})
 				}
 			}
@@ -58,16 +60,16 @@ func Broken(fsys fs.FS) ([]Link, error) {
 	return broken, err
 }
 
-// exists reports whether target, a link in the file name, points at a file or
-// directory in fsys. It also reports true for a link it does not check: an
-// external URL, and a link that is only a fragment.
-func exists(fsys fs.FS, name, target string) bool {
+// isBroken reports whether target, a link in the file name, is a relative link
+// to a file or directory that is not in fsys. An external URL and a link that
+// is only a fragment are not checked, so they are not broken.
+func isBroken(fsys fs.FS, name, target string) bool {
 	u, err := url.Parse(target)
 	if err != nil {
-		return false
+		return true
 	}
 	if u.Scheme != "" || u.Host != "" || u.Path == "" {
-		return true
+		return false
 	}
 	// A leading slash starts at the root, as it does on GitHub.
 	resolved := path.Join(".", u.Path)
@@ -77,5 +79,5 @@ func exists(fsys fs.FS, name, target string) bool {
 	// A target that leaves the root is not a valid path in fsys, so Stat
 	// fails and the link is reported.
 	_, err = fs.Stat(fsys, resolved)
-	return err == nil
+	return err != nil
 }
