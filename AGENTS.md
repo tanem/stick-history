@@ -2,21 +2,33 @@
 
 ### Issue tracker
 
-Issues live in GitHub Issues on `tanem/stick-history`, accessed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+Issues are GitHub Issues on `tanem/stick-history`. Use the `gh` CLI to work with them. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
-The five canonical triage roles use their default label names: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+The five triage roles use their default label names: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human` and `wontfix`. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
-Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+This repo is single-context. It has one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
 ## Pull requests
 
 ### Release label
 
-Every pull request carries exactly one release label, and the `release-label` check fails without it. The label sets the version bump of the next release: `breaking` is major, `enhancement` is minor, and any other label is patch. Use `bug` for a fix to the shipped tool, `documentation` for docs and `internal` for a change that does not alter the shipped tool. `safe to test` is not counted.
+Every pull request carries exactly one release label. The `release-label` check fails without it. `safe to test` is not counted.
+
+The label sets the version bump of the next release:
+
+- `breaking` is major.
+- `enhancement` is minor.
+- Any other label is patch.
+
+For a patch, use:
+
+- `bug` for a fix to the shipped tool.
+- `documentation` for docs.
+- `internal` for a change that does not alter the shipped tool.
 
 ### Breaking changes while the version is `0.x`
 
