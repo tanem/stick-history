@@ -6,7 +6,7 @@ The tool prints the tracklist of a set from the History a Pioneer DJ player wrot
 
 **Stick**:
 A mounted volume with a `PIONEER` folder at its root.
-_Avoid_: USB, drive, device
+_Avoid_: USB on its own, drive, device
 
 **History**:
 The list a player writes of the tracks played in one set, named `HISTORY <nnn>`.
