@@ -16,8 +16,6 @@ $ stick-history
 7. Lights On - One More (Promoter Says No Edit)
 ```
 
-The morning after a set, someone asks for a track ID, and the answer is on a USB stick.
-
 `stick-history` prints the tracklist of a set from the History a Pioneer DJ player wrote to a USB stick. It reads `PIONEER/rekordbox/export.pdb` on the stick directly, so it does not need rekordbox to turn a History into a tracklist.
 
 ## Install
