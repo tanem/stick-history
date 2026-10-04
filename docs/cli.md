@@ -75,7 +75,7 @@ On an error, the command prints a message to standard error, prints nothing to s
 - More than one stick is mounted and `--volume` is not given.
 - The path given to `--volume` has no `PIONEER` folder.
 - No History is non-empty.
-- The value given to `--history` is not a number.
+- The value given to `--history` is not a number, or is negative.
 - The named History is empty or absent.
 - `export.pdb` is unreadable or malformed.
 
