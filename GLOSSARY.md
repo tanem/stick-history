@@ -1,6 +1,6 @@
 # stick-history
 
-The tool prints the tracklist of a set from the History a Pioneer DJ player wrote to a stick.
+The tool prints the tracklist of a set from the History a Pioneer DJ player wrote to a USB stick.
 
 ## Language
 
