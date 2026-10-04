@@ -128,4 +128,6 @@ jobs:
       - name: Run the built binary
         run: |
           tar -xzf "dist/stick-history_${VERSION}_linux_amd64.tar.gz" -C "$RUNNER_TEMP"
-          "$RUNNER_TEMP/stick-history_${VERSION}_linux_amd64/stick-history" --help
+          got=$("$RUNNER_TEMP/stick-history_${VERSION}_linux_amd64/stick-history" --version)
+          [ "$got" = "stick-history $VERSION" ] \
+            || { echo "--version printed \"$got\", want \"stick-history $VERSION\"" >&2; exit 1; }

@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,6 +26,7 @@ import (
 )
 
 const usage = `Usage: stick-history [--list] [--history <n>] [--volume <path>] [<file>]
+       stick-history --version
 
 Prints the newest non-empty History on the mounted stick as a tracklist, one
 line per track, "N. Artist - Title". With <file>, writes it there instead of
@@ -35,6 +37,14 @@ standard output.
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
+
+// version is the version of a release build, without a leading v.
+// scripts/build.sh sets it with -ldflags. It is empty in any other build.
+var version string
+
+// readBuildInfo returns the build information of the running binary. Tests
+// replace it.
+var readBuildInfo = debug.ReadBuildInfo
 
 // listVolumes returns the directories that may be the root of a stick. Tests
 // replace it.
@@ -50,11 +60,18 @@ func run(args []string, stdout, stderr io.Writer) int {
 	list := fs.Bool("list", false, "print each non-empty History with its track count, newest last")
 	number := fs.String("history", "", "print HISTORY <n> instead of the newest non-empty History")
 	volume := fs.String("volume", "", "the stick to read when more than one is mounted")
+	showVersion := fs.Bool("version", false, "print the version and exit")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}
 		return 2
+	}
+	if *showVersion {
+		if _, err := fmt.Fprintf(stdout, "stick-history %s\n", buildVersion()); err != nil {
+			return fail(stderr, err)
+		}
+		return 0
 	}
 	var outPath string
 	switch rest := fs.Args(); {
@@ -108,6 +125,21 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return fail(stderr, err)
 	}
 	return 0
+}
+
+// buildVersion returns the version --version prints: the stamped version of a
+// release build, the module version of a go install build, and "(devel)" for
+// any other build. A go install build is told apart by the checksum of its
+// main module, which only a downloaded module has. A build from a checkout has
+// none, whatever version Go derived for it from the commit.
+func buildVersion() string {
+	if version != "" {
+		return version
+	}
+	if info, ok := readBuildInfo(); ok && info.Main.Sum != "" {
+		return strings.TrimPrefix(info.Main.Version, "v")
+	}
+	return "(devel)"
 }
 
 func usageError(fs *flag.FlagSet, msg string) int {

@@ -45,6 +45,7 @@ Options:
 - `--history <n>` prints `HISTORY <n>` instead of the newest one. `<n>` can be given with or without leading zeros: `--history 52` and `--history 052` are the same.
 - `--volume <path>` chooses the stick when more than one is mounted. Without it, the command exits non-zero and lists the candidates on standard error.
 - A trailing path writes the tracklist to that file instead of standard output. Options go before the path.
+- `--version` prints the version and exits.
 
 A stick is a mounted volume with a `PIONEER` folder at its root. The command looks under `/Volumes` on macOS, at the drive roots on Windows, and under `/media`, `/run/media` and `/mnt` on Linux.
 
@@ -62,19 +63,29 @@ stick-history | sed -E 's/ - [A-G][#b]?m? - / - /'
 
 ## Install
 
+With Homebrew, on macOS or Linux:
+
+```sh
+brew install tanem/tap/stick-history
+```
+
+The formula is in [tanem/homebrew-tap](https://github.com/tanem/homebrew-tap). Each release updates it, so `brew upgrade` installs the latest release.
+
 With Go 1.23 or later:
 
 ```sh
 go install github.com/tanem/stick-history@latest
 ```
 
-With Homebrew:
+Archives for macOS (Apple silicon and Intel), Windows (x86-64) and Linux (x86-64) are attached to each [GitHub Release](https://github.com/tanem/stick-history/releases), with their checksums in `SHA256SUMS`. The macOS binaries are not signed or notarised. Homebrew does not quarantine a formula's download, so the binary it installs runs without a Gatekeeper prompt. A binary from an archive downloaded with a browser is quarantined, and Gatekeeper can block it.
+
+Each archive has a build provenance attestation. With the [GitHub CLI](https://cli.github.com), this checks that an archive was built by this repo's release workflow:
 
 ```sh
-brew install tanem/tap/stick-history
+gh attestation verify stick-history_0.1.0_darwin_arm64.tar.gz --repo tanem/stick-history
 ```
 
-Binaries for macOS (Apple silicon and Intel), Windows (x86-64) and Linux (x86-64) are attached to each [GitHub Release](https://github.com/tanem/stick-history/releases).
+`stick-history --version` prints the version of a release, as in `stick-history 0.1.0`. A build installed with `go install github.com/tanem/stick-history@latest` prints the version of the module, and any other build prints `stick-history (devel)`.
 
 ## What it reads
 
@@ -103,6 +114,14 @@ The parser has a fuzz target. `go test` runs it on its seed, and this fuzzes it:
 go test -fuzz=FuzzParse ./pdb
 ```
 
-A tag of the form `v1.2.3` runs the release workflow, which builds the binaries, attaches them to a GitHub Release together with `SHA256SUMS`, and attaches a Homebrew formula for copying into the `tanem/homebrew-tap` repo.
+### Releases
+
+The release workflow runs every Monday and can be started by hand. It uses [tanem/release-action](https://github.com/tanem/release-action) to derive the next version from the labels on the pull requests merged since the last release: `breaking` is a major bump, `enhancement` is a minor bump and any other label is a patch bump. When nothing was merged, it releases nothing.
+
+When there is something to release, the workflow tags the commit and creates the GitHub Release with notes GitHub generates from the pull requests. It then builds the archives with `scripts/build.sh`, attests them, attaches them to the release together with `SHA256SUMS`, and commits the formula that `scripts/formula.sh` writes to `tanem/homebrew-tap`. No tag is pushed by hand.
+
+A run started by hand with the dry-run option logs the version it would release and changes nothing.
+
+[docs/adr/0001-keep-build-scripts-over-goreleaser.md](docs/adr/0001-keep-build-scripts-over-goreleaser.md) records why the build uses these scripts and not GoReleaser.
 
 [CONTRIBUTING.md](CONTRIBUTING.md) covers sending a change, and [SECURITY.md](SECURITY.md) covers reporting a vulnerability.

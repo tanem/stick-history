@@ -1,5 +1,6 @@
 #!/bin/sh
-# Builds a static binary per platform into dist/ and writes SHA256SUMS.
+# Builds a static binary per platform into dist/ and writes SHA256SUMS. The
+# binaries print <version> for --version.
 # Usage: scripts/build.sh <version>, where <version> has no leading v.
 set -eu
 
@@ -17,7 +18,7 @@ for target in darwin/arm64 darwin/amd64 windows/amd64 linux/amd64; do
 	if [ "$os" = windows ]; then
 		bin=stick-history.exe
 	fi
-	CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags="-s -w" -o "$dir/$bin" .
+	CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags="-s -w -X main.version=$version" -o "$dir/$bin" .
 	cp LICENSE README.md "$dir/"
 	if [ "$os" = windows ]; then
 		(cd dist && zip -q -r "$name.zip" "$name")

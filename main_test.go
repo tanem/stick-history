@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"testing"
 
@@ -274,6 +275,71 @@ func TestUsageErrors(t *testing.T) {
 	if r := exec("--help"); r.code != 0 || !strings.Contains(r.stderr, "Usage") {
 		t.Errorf("--help: got %+v", r)
 	}
+}
+
+// A release build carries the version scripts/build.sh stamped into it.
+// --version needs no stick.
+func TestVersionOfReleaseBuild(t *testing.T) {
+	withVolumes(t)
+	withVersion(t, "1.2.3")
+	r := exec("--version")
+	if r.code != 0 || r.stdout != "stick-history 1.2.3\n" || r.stderr != "" {
+		t.Errorf("got %+v", r)
+	}
+}
+
+// A go install build has no stamped version. It prints the version of the
+// module it was built from, without the leading v.
+func TestVersionOfGoInstallBuild(t *testing.T) {
+	withVolumes(t)
+	withVersion(t, "")
+	withBuildInfo(t, &debug.BuildInfo{Main: debug.Module{
+		Path:    "github.com/tanem/stick-history",
+		Version: "v0.3.1",
+		Sum:     "h1:J1shsA93PJUEVaUSaay7UXAyE8aimq3GW0pjlolpa24=",
+	}})
+	r := exec("--version")
+	if r.code != 0 || r.stdout != "stick-history 0.3.1\n" || r.stderr != "" {
+		t.Errorf("got %+v", r)
+	}
+}
+
+// Any other build prints a marker in place of a version: one whose module was
+// not downloaded, so has no checksum, and one with no build information. Go
+// 1.24 and later give a build from a checkout a version derived from the
+// commit, and that is not a release either.
+func TestVersionOfOtherBuilds(t *testing.T) {
+	withVolumes(t)
+	withVersion(t, "")
+	for name, info := range map[string]*debug.BuildInfo{
+		"go build, before Go 1.24": {Main: debug.Module{Version: "(devel)"}},
+		"go build, from Go 1.24":   {Main: debug.Module{Version: "v0.3.2-0.20261004001122-16a9053f3c1d+dirty"}},
+		"no build information":     nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			withBuildInfo(t, info)
+			r := exec("--version")
+			if r.code != 0 || r.stdout != "stick-history (devel)\n" || r.stderr != "" {
+				t.Errorf("got %+v", r)
+			}
+		})
+	}
+}
+
+// withBuildInfo makes the command read info as its build information, or none
+// when info is nil.
+func withBuildInfo(t *testing.T, info *debug.BuildInfo) {
+	t.Helper()
+	old := readBuildInfo
+	readBuildInfo = func() (*debug.BuildInfo, bool) { return info, info != nil }
+	t.Cleanup(func() { readBuildInfo = old })
+}
+
+func withVersion(t *testing.T, v string) {
+	t.Helper()
+	old := version
+	version = v
+	t.Cleanup(func() { version = old })
 }
 
 func TestOlder(t *testing.T) {
