@@ -11,6 +11,8 @@
   "vulnerabilityAlerts": {
     "enabled": true
   },
+  "osvVulnerabilityAlerts": true,
+  "dependencyDashboardOSVVulnerabilitySummary": "all",
   "packageRules": [
     {
       "description": "Digest, minor and patch updates merge once CI passes. Major updates wait for review.",
