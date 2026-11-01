@@ -33,7 +33,7 @@ env:
   GIT_COMMITTER_NAME: github-actions[bot]
   GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
   # renovate: datasource=golang-version depName=go
-  GO_VERSION: 1.27.1
+  GO_VERSION: 1.27.3
   # Use the Go that setup-go installed and never download another one.
   GOTOOLCHAIN: local
 
