@@ -136,7 +136,7 @@ jobs:
       # logs the version and the bump and changes nothing. The input is empty
       # on a scheduled run, which the action reads as false. A resume skips
       # this, so it creates no tag and no release.
-      - uses: tanem/release-action@1f7a65201b7636236bc51d84fa455711ba867790 # v0.1.4
+      - uses: tanem/release-action@4a172655e915c339cd7eac9722c26bfb071f1d1a # v0.1.6
         id: release
         if: inputs.version == ''
         with:
